@@ -1,4 +1,5 @@
 """VeSync integration."""
+
 from datetime import timedelta
 import logging
 
@@ -69,7 +70,7 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> b
         try:
             await hass.async_add_executor_job(manager.update)
         except Exception as err:
-            raise UpdateFailed(f"Update failed: {err}")
+            raise UpdateFailed(f"Update failed: {err}") from err
 
     coordinator = DataUpdateCoordinator(
         hass,

@@ -1,4 +1,5 @@
 """Support for power & energy sensors for VeSync outlets."""
+
 import logging
 
 from homeassistant.components.sensor import (
@@ -57,7 +58,7 @@ def _setup_entities(devices, async_add_entities, coordinator):
     for dev in devices:
         if hasattr(dev, "fryer_status"):
             for stype in SENSOR_TYPES_AIRFRYER.values():
-                entities.append(
+                entities.append(  # noqa: PERF401
                     VeSyncairfryerSensor(
                         dev,
                         coordinator,
@@ -111,8 +112,7 @@ class VeSyncairfryerSensor(VeSyncBaseEntity, SensorEntity):
     @property
     def native_value(self):
         """Return the value."""
-        value = getattr(self.airfryer, self.stype[5], None)
-        return value
+        return getattr(self.airfryer, self.stype[5], None)
 
     @property
     def native_unit_of_measurement(self):
