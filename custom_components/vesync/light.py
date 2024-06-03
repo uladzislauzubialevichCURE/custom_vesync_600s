@@ -255,7 +255,7 @@ class VeSyncNightLightHA(VeSyncDimmableLightHA):
 
     def turn_on(self, **kwargs):
         """Turn the night light on."""
-        if self.device.config_dict["module"] == "VeSyncAirBypass":
+        if self.device._config_dict["module"] == "VeSyncAirBypass":
             if ATTR_BRIGHTNESS in kwargs and kwargs[ATTR_BRIGHTNESS] < 255:
                 self.device.set_night_light("dim")
             else:
@@ -269,7 +269,7 @@ class VeSyncNightLightHA(VeSyncDimmableLightHA):
 
     def turn_off(self, **kwargs):
         """Turn the night light off."""
-        if self.device.config_dict["module"] == "VeSyncAirBypass":
+        if self.device._config_dict["module"] == "VeSyncAirBypass":
             self.device.set_night_light("off")
         else:
             self.device.set_night_light_brightness(0)
