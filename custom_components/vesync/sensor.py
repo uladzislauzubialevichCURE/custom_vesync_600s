@@ -8,7 +8,13 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import PERCENTAGE, UnitOfEnergy, UnitOfPower, CONCENTRATION_MICROGRAMS_PER_CUBIC_METER, DEGREE
+from homeassistant.const import (
+    CONCENTRATION_MICROGRAMS_PER_CUBIC_METER,
+    DEGREE,
+    PERCENTAGE,
+    UnitOfEnergy,
+    UnitOfPower,
+)
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity import EntityCategory
@@ -269,12 +275,12 @@ class VeSyncAirQualitySensor(VeSyncHumidifierSensorEntity):
     @property
     def unique_id(self):
         """Return unique ID for air quality sensor on device."""
-        return f"{super().unique_id}-air-quality-index"
+        return f"{super().unique_id}-air-quality"
 
     @property
     def name(self):
         """Return sensor name."""
-        return f"{super().name} air quality index"
+        return f"{super().name} air quality"
 
     @property
     def native_value(self):
@@ -291,6 +297,7 @@ class VeSyncAirQualitySensor(VeSyncHumidifierSensorEntity):
         _LOGGER.warning("No air quality index found in '%s'", self.name)
         return None
 
+
 class VeSyncAirQualityPercSensor(VeSyncHumidifierSensorEntity):
     """Representation of an air quality percentage sensor."""
 
@@ -306,12 +313,12 @@ class VeSyncAirQualityPercSensor(VeSyncHumidifierSensorEntity):
     @property
     def unique_id(self):
         """Return unique ID for air quality sensor on device."""
-        return f"{super().unique_id}-air-quality"
+        return f"{super().unique_id}-air-quality-perc"
 
     @property
     def name(self):
         """Return sensor name."""
-        return f"{super().name} air quality"
+        return f"{super().name} air quality percentage"
 
     @property
     def native_unit_of_measurement(self):
@@ -333,12 +340,13 @@ class VeSyncAirQualityPercSensor(VeSyncHumidifierSensorEntity):
         _LOGGER.warning("No air quality percentage found in '%s'", self.name)
         return None
 
+
 class VeSyncAirQualityValueSensor(VeSyncHumidifierSensorEntity):
     """Representation of an air quality sensor."""
 
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_device_class = SensorDeviceClass.PM25
-    _attr_native_unit_of_measurement=CONCENTRATION_MICROGRAMS_PER_CUBIC_METER
+    _attr_native_unit_of_measurement = CONCENTRATION_MICROGRAMS_PER_CUBIC_METER
 
     def __init__(self, device, coordinator) -> None:
         """Initialize the VeSync device."""
@@ -347,12 +355,12 @@ class VeSyncAirQualityValueSensor(VeSyncHumidifierSensorEntity):
     @property
     def unique_id(self):
         """Return unique ID for air quality sensor on device."""
-        return f"{super().unique_id}-pm25"
+        return f"{super().unique_id}-air-quality-value"
 
     @property
     def name(self):
         """Return sensor name."""
-        return f"{super().name} PM2.5"
+        return f"{super().name} air quality value"
 
     @property
     def native_value(self):
@@ -369,12 +377,13 @@ class VeSyncAirQualityValueSensor(VeSyncHumidifierSensorEntity):
         _LOGGER.warning("No air quality value found in '%s'", self.name)
         return None
 
+
 class VeSyncPM1Sensor(VeSyncHumidifierSensorEntity):
     """Representation of a PM1 sensor."""
 
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_device_class = SensorDeviceClass.PM1
-    _attr_native_unit_of_measurement=CONCENTRATION_MICROGRAMS_PER_CUBIC_METER
+    _attr_native_unit_of_measurement = CONCENTRATION_MICROGRAMS_PER_CUBIC_METER
 
     def __init__(self, device, coordinator) -> None:
         """Initialize the VeSync device."""
@@ -392,7 +401,7 @@ class VeSyncPM1Sensor(VeSyncHumidifierSensorEntity):
 
     @property
     def native_value(self):
-        """Return the PM1"""
+        """Return the PM1."""
         if has_feature(self.smarthumidifier, "details", "pm1"):
             quality_value = self.smarthumidifier.details["pm1"]
             if isinstance(quality_value, (int, float)):
@@ -405,12 +414,13 @@ class VeSyncPM1Sensor(VeSyncHumidifierSensorEntity):
         _LOGGER.warning("No PM1 value found in '%s'", self.name)
         return None
 
+
 class VeSyncPM10Sensor(VeSyncHumidifierSensorEntity):
     """Representation of a PM10 sensor."""
 
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_device_class = SensorDeviceClass.PM10
-    _attr_native_unit_of_measurement=CONCENTRATION_MICROGRAMS_PER_CUBIC_METER
+    _attr_native_unit_of_measurement = CONCENTRATION_MICROGRAMS_PER_CUBIC_METER
 
     def __init__(self, device, coordinator) -> None:
         """Initialize the VeSync device."""
@@ -428,7 +438,7 @@ class VeSyncPM10Sensor(VeSyncHumidifierSensorEntity):
 
     @property
     def native_value(self):
-        """Return the PM10"""
+        """Return the PM10."""
         if has_feature(self.smarthumidifier, "details", "pm10"):
             quality_value = self.smarthumidifier.details["pm10"]
             if isinstance(quality_value, (int, float)):
@@ -440,6 +450,7 @@ class VeSyncPM10Sensor(VeSyncHumidifierSensorEntity):
             )
         _LOGGER.warning("No PM10 value found in '%s'", self.name)
         return None
+
 
 class VeSyncFilterLifeSensor(VeSyncHumidifierSensorEntity):
     """Representation of a filter life sensor."""
@@ -501,6 +512,7 @@ class VeSyncFilterLifeSensor(VeSyncHumidifierSensorEntity):
         """Return the icon to use in the frontend, if any."""
         return "mdi:air-filter"
 
+
 class VeSyncFanRotateAngleSensor(VeSyncHumidifierSensorEntity):
     """Representation of a fan rotate angle sensor."""
 
@@ -551,6 +563,7 @@ class VeSyncFanRotateAngleSensor(VeSyncHumidifierSensorEntity):
     def icon(self):
         """Return the icon to use in the frontend, if any."""
         return "mdi:rotate-3d-variant"
+
 
 class VeSyncHumiditySensor(VeSyncHumidifierSensorEntity):
     """Representation of current humidity for a VeSync humidifier."""

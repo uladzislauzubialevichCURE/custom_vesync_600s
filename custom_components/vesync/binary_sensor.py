@@ -151,6 +151,7 @@ class VeSyncWaterTankLiftedSensor(VeSyncBinarySensorEntity):
         """Return a value indicating whether the Humidifier's water tank is lifted."""
         return self.smarthumidifier.details["water_tank_lifted"]
 
+
 class VeSyncFilterOpenStateSensor(VeSyncBinarySensorEntity):
     """Filter Open Sensor."""
 

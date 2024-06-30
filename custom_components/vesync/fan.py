@@ -70,15 +70,15 @@ class VeSyncFanHA(VeSyncDevice, FanEntity):
         self.smartfan = fan
         self._speed_range = (1, 1)
         self._attr_preset_modes = [VS_MODE_MANUAL, VS_MODE_AUTO, VS_MODE_SLEEP]
-        if has_feature(self.smartfan, "config_dict", VS_LEVELS):
-            self._speed_range = (1, max(self.smartfan.config_dict[VS_LEVELS]))
-        if has_feature(self.smartfan, "config_dict", VS_MODES):
+        if has_feature(self.smartfan, "_config_dict", VS_LEVELS):
+            self._speed_range = (1, max(self.smartfan._config_dict[VS_LEVELS]))
+        if has_feature(self.smartfan, "_config_dict", VS_MODES):
             self._attr_preset_modes = [
                 VS_MODE_MANUAL,
                 *[
                     mode
                     for mode in [VS_MODE_AUTO, VS_MODE_SLEEP, VS_MODE_TURBO]
-                    if mode in self.smartfan.config_dict[VS_MODES]
+                    if mode in self.smartfan._config_dict[VS_MODES]
                 ],
             ]
         if self.smartfan.device_type == "LV-PUR131S":
