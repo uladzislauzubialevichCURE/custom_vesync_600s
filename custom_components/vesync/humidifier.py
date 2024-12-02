@@ -1,11 +1,10 @@
-"""Support for VeSync humidifiers."""
 from __future__ import annotations
 
 from collections.abc import Mapping
 import logging
 from typing import Any
 
-from pyvesync.vesyncfan import VeSyncHumid200300S
+from pyvesync.vesyncfan import VeSyncHumid200300S, VeSyncHumid
 
 from homeassistant.components.humidifier import HumidifierEntity
 from homeassistant.components.humidifier.const import (
@@ -33,10 +32,8 @@ from .const import (
 
 _LOGGER = logging.getLogger(__name__)
 
-
 MAX_HUMIDITY = 80
 MIN_HUMIDITY = 30
-
 
 VS_TO_HA_MODE_MAP = {
     VS_MODE_AUTO: MODE_AUTO,
@@ -46,7 +43,6 @@ VS_TO_HA_MODE_MAP = {
 }
 
 HA_TO_VS_MODE_MAP = {v: k for k, v in VS_TO_HA_MODE_MAP.items()}
-
 
 async def async_setup_entry(
     hass: HomeAssistant,
@@ -72,15 +68,16 @@ async def async_setup_entry(
         coordinator,
     )
 
-
 @callback
 def _setup_entities(devices, async_add_entities, coordinator):
     """Check if device is online and add entity."""
-    async_add_entities(
-        [VeSyncHumidifierHA(dev, coordinator) for dev in devices],
-        update_before_add=True,
-    )
-
+    entities = []
+    for dev in devices:
+        if isinstance(dev, VeSyncHumid200300S):
+            entities.append(VeSyncHumidifierHA(dev, coordinator))
+        elif dev.device_type == "LUH-A601S-WUSB":
+            entities.append(VeSyncHumidifier600SHA(dev, coordinator))
+    async_add_entities(entities, update_before_add=True)
 
 def _get_ha_mode(vs_mode: str) -> str | None:
     ha_mode = VS_TO_HA_MODE_MAP.get(vs_mode)
@@ -88,13 +85,11 @@ def _get_ha_mode(vs_mode: str) -> str | None:
         _LOGGER.warning("Unknown mode '%s'", vs_mode)
     return ha_mode
 
-
 def _get_vs_mode(ha_mode: str) -> str | None:
     vs_mode = HA_TO_VS_MODE_MAP.get(ha_mode)
     if vs_mode is None:
         _LOGGER.warning("Unknown mode '%s'", ha_mode)
     return vs_mode
-
 
 class VeSyncHumidifierHA(VeSyncDevice, HumidifierEntity):
     """Representation of a VeSync humidifier."""
@@ -113,12 +108,9 @@ class VeSyncHumidifierHA(VeSyncDevice, HumidifierEntity):
         modes = []
         for vs_mode in self.smarthumidifier.mist_modes:
             ha_mode = _get_ha_mode(vs_mode)
-
             if ha_mode is None:
                 continue
-
             modes.append(ha_mode)
-
         return modes
 
     @property
@@ -139,7 +131,7 @@ class VeSyncHumidifierHA(VeSyncDevice, HumidifierEntity):
     @property
     def is_on(self) -> bool:
         """Return True if humidifier is on."""
-        return self.smarthumidifier.enabled  # device_status is always on
+        return self.smarthumidifier.enabled
 
     @property
     def unique_info(self) -> str:
@@ -149,7 +141,6 @@ class VeSyncHumidifierHA(VeSyncDevice, HumidifierEntity):
     @property
     def extra_state_attributes(self) -> Mapping[str, Any]:
         """Return the state attributes of the humidifier."""
-
         attr = {}
         for k, v in self.smarthumidifier.details.items():
             if k in VS_TO_HA_ATTRIBUTES:
@@ -164,7 +155,7 @@ class VeSyncHumidifierHA(VeSyncDevice, HumidifierEntity):
         """Set the target humidity of the device."""
         if humidity not in range(self.min_humidity, self.max_humidity + 1):
             raise ValueError(
-                "{humidity} is not between {self.min_humidity} and {self.max_humidity} (inclusive)"
+                f"{humidity} is not between {self.min_humidity} and {self.max_humidity} (inclusive)"
             )
         if self.smarthumidifier.set_humidity(humidity):
             self.schedule_update_ha_state()
@@ -175,17 +166,14 @@ class VeSyncHumidifierHA(VeSyncDevice, HumidifierEntity):
         """Set the mode of the device."""
         if mode not in self.available_modes:
             raise ValueError(
-                "{mode} is not one of the valid available modes: {self.available_modes}"
+                f"{mode} is not one of the valid available modes: {self.available_modes}"
             )
         if self.smarthumidifier.set_humidity_mode(_get_vs_mode(mode)):
             self.schedule_update_ha_state()
         else:
             raise ValueError("An error occurred while setting mode.")
 
-    def turn_on(
-        self,
-        **kwargs,
-    ) -> None:
+    def turn_on(self, **kwargs) -> None:
         """Turn the device on."""
         success = self.smarthumidifier.turn_on()
         if not success:
@@ -196,3 +184,40 @@ class VeSyncHumidifierHA(VeSyncDevice, HumidifierEntity):
         success = self.smarthumidifier.turn_off()
         if not success:
             raise ValueError("An error occurred while turning off.")
+
+class VeSyncHumidifier600SHA(VeSyncHumidifierHA):
+    """Representation of a VeSync 600S humidifier."""
+
+    def __init__(self, humidifier: VeSyncHumid, coordinator) -> None:
+        """Initialize the VeSync 600S humidifier device."""
+        super().__init__(humidifier, coordinator)
+        self.smarthumidifier = humidifier
+
+    @property
+    def available_modes(self) -> list[str]:
+        """Return the available modes."""
+        return [MODE_AUTO, MODE_NORMAL]
+
+    @property
+    def target_humidity(self) -> int:
+        """Return the humidity we try to reach."""
+        return self.smarthumidifier.config.get("target_humidity", 45)
+
+    @property
+    def mode(self) -> str | None:
+        """Get the current preset mode."""
+        current_mode = self.smarthumidifier.details.get("mode", "manual")
+        return MODE_AUTO if current_mode == "auto" else MODE_NORMAL
+
+    @property
+    def extra_state_attributes(self) -> Mapping[str, Any]:
+        """Return the state attributes of the humidifier."""
+        attr = super().extra_state_attributes
+        attr.update({
+            "mist_level": self.smarthumidifier.details.get("mist_level", 1),
+            "water_lacks": self.smarthumidifier.details.get("water_lacks", False),
+            "humidity_high": self.smarthumidifier.details.get("humidity_high", False),
+            "night_light": self.smarthumidifier.details.get("night_light", False),
+            "display": self.smarthumidifier.details.get("display", True),
+        })
+        return attr
