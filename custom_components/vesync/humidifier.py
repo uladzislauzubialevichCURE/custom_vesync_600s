@@ -1,10 +1,9 @@
+"""Support for VeSync humidifiers."""
 from __future__ import annotations
 
 from collections.abc import Mapping
 import logging
 from typing import Any
-
-from pyvesync.vesyncfan import VeSyncHumid200300S, VeSyncHumid
 
 from homeassistant.components.humidifier import HumidifierEntity
 from homeassistant.components.humidifier.const import (
@@ -27,7 +26,6 @@ from .const import (
     VS_MODE_HUMIDITY,
     VS_MODE_MANUAL,
     VS_MODE_SLEEP,
-    VS_TO_HA_ATTRIBUTES,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -50,7 +48,6 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up the VeSync humidifier platform."""
-
     coordinator = hass.data[DOMAIN][config_entry.entry_id]["coordinator"]
 
     @callback
@@ -73,151 +70,137 @@ def _setup_entities(devices, async_add_entities, coordinator):
     """Check if device is online and add entity."""
     entities = []
     for dev in devices:
-        if isinstance(dev, VeSyncHumid200300S):
-            entities.append(VeSyncHumidifierHA(dev, coordinator))
-        elif dev.device_type == "LUH-A601S-WUSB":
+        if dev.device_type in ["LEH-S601S-WUS"]:
             entities.append(VeSyncHumidifier600SHA(dev, coordinator))
     async_add_entities(entities, update_before_add=True)
 
-def _get_ha_mode(vs_mode: str) -> str | None:
-    ha_mode = VS_TO_HA_MODE_MAP.get(vs_mode)
-    if ha_mode is None:
-        _LOGGER.warning("Unknown mode '%s'", vs_mode)
-    return ha_mode
+class VeSyncHumidifier600SHA(VeSyncDevice, HumidifierEntity):
+   """Representation of a VeSync 600S humidifier."""
 
-def _get_vs_mode(ha_mode: str) -> str | None:
-    vs_mode = HA_TO_VS_MODE_MAP.get(ha_mode)
-    if vs_mode is None:
-        _LOGGER.warning("Unknown mode '%s'", ha_mode)
-    return vs_mode
+   _attr_max_humidity = MAX_HUMIDITY
+   _attr_min_humidity = MIN_HUMIDITY
 
-class VeSyncHumidifierHA(VeSyncDevice, HumidifierEntity):
-    """Representation of a VeSync humidifier."""
+   def __init__(self, humidifier, coordinator) -> None:
+       """Initialize the VeSync 600S humidifier."""
+       super().__init__(humidifier, coordinator)
+       self.smarthumidifier = humidifier
 
-    _attr_max_humidity = MAX_HUMIDITY
-    _attr_min_humidity = MIN_HUMIDITY
+   @property
+   def supported_features(self) -> int:
+       """Return supported features."""
+       return HumidifierEntityFeature.MODES
 
-    def __init__(self, humidifier: VeSyncHumid200300S, coordinator) -> None:
-        """Initialize the VeSync humidifier device."""
-        super().__init__(humidifier, coordinator)
-        self.smarthumidifier = humidifier
+   @property
+   def available_modes(self) -> list[str]:
+       """Return available modes."""
+       modes = []
+       if "mist_modes" in self.smarthumidifier._config_dict:
+           modes = self.smarthumidifier._config_dict["mist_modes"]
+       return modes
 
-    @property
-    def available_modes(self) -> list[str]:
-        """Return the available mist modes."""
-        modes = []
-        for vs_mode in self.smarthumidifier.mist_modes:
-            ha_mode = _get_ha_mode(vs_mode)
-            if ha_mode is None:
-                continue
-            modes.append(ha_mode)
-        return modes
+   @property
+   def target_humidity(self) -> int:
+       """Return the target humidity."""
+       return self.smarthumidifier.details.get("target_humidity", 45)
 
-    @property
-    def supported_features(self):
-        """Flag supported features."""
-        return HumidifierEntityFeature.MODES
+   @property
+   def mode(self) -> str | None:
+       """Return current mode."""
+       current_mode = self.smarthumidifier.details.get("mode", "manual")
+       if current_mode == "humidity":
+           return MODE_AUTO
+       elif current_mode == "sleep":
+           return MODE_SLEEP
+       return MODE_NORMAL
 
-    @property
-    def target_humidity(self) -> int:
-        """Return the humidity we try to reach."""
-        return self.smarthumidifier.config["auto_target_humidity"]
+   @property
+   def is_on(self) -> bool:
+       """Return True if humidifier is on."""
+       return self.smarthumidifier.device_status == "on"
 
-    @property
-    def mode(self) -> str | None:
-        """Get the current preset mode."""
-        return _get_ha_mode(self.smarthumidifier.details["mode"])
+   @property
+   def unique_info(self) -> str:
+       """Return unique info for this device."""
+       return self.smarthumidifier.uuid
 
-    @property
-    def is_on(self) -> bool:
-        """Return True if humidifier is on."""
-        return self.smarthumidifier.enabled
+   @property
+   def extra_state_attributes(self) -> Mapping[str, Any]:
+       """Return the state attributes of the humidifier."""
+       attr = {}
+       details = self.smarthumidifier.details
+       attr.update({
+           "mist_level": details.get("mist_level", 1),
+           "mist_virtual_level": details.get("mist_virtual_level", 1),
+           "water_lacks": details.get("water_lacks", False),
+           "water_tank_lifted": details.get("water_tank_lifted", False),
+           "filter_life_percentage": details.get("filter_life_percentage", 100),
+           "temperature": details.get("temperature", 0),
+           "display": details.get("display", True),
+           "humidity": details.get("humidity", 0),
+           "drying_mode": details.get("drying_mode", {})
+       })
+       return attr
 
-    @property
-    def unique_info(self) -> str:
-        """Return the ID of this humidifier."""
-        return self.smarthumidifier.uuid
+   async def async_set_humidity(self, humidity: int) -> None:
+       """Set the target humidity."""
+       result = await self.hass.async_add_executor_job(
+           self.smarthumidifier.set_target_humidity, humidity
+       )
+       if result:
+           self.async_write_ha_state()
 
-    @property
-    def extra_state_attributes(self) -> Mapping[str, Any]:
-        """Return the state attributes of the humidifier."""
-        attr = {}
-        for k, v in self.smarthumidifier.details.items():
-            if k in VS_TO_HA_ATTRIBUTES:
-                attr[VS_TO_HA_ATTRIBUTES[k]] = v
-            elif k in self.state_attributes:
-                attr[f"vs_{k}"] = v
-            else:
-                attr[k] = v
-        return attr
+   async def async_set_mode(self, mode: str) -> None:
+       """Set humidifier mode."""
+       vs_mode = mode.lower()
+       if vs_mode == MODE_AUTO:
+           vs_mode = "humidity"
+       result = await self.hass.async_add_executor_job(
+           self.smarthumidifier.set_humidity_mode, vs_mode
+       )
+       if result:
+           self.async_write_ha_state()
 
-    def set_humidity(self, humidity: int) -> None:
-        """Set the target humidity of the device."""
-        if humidity not in range(self.min_humidity, self.max_humidity + 1):
-            raise ValueError(
-                f"{humidity} is not between {self.min_humidity} and {self.max_humidity} (inclusive)"
-            )
-        if self.smarthumidifier.set_humidity(humidity):
-            self.schedule_update_ha_state()
-        else:
-            raise ValueError("An error occurred while setting humidity.")
+   async def async_turn_on(self, **kwargs: Any) -> None:
+       """Turn the humidifier on."""
+       result = await self.hass.async_add_executor_job(
+           self.smarthumidifier.turn_on
+       )
+       if result:
+           self.async_write_ha_state()
 
-    def set_mode(self, mode: str) -> None:
-        """Set the mode of the device."""
-        if mode not in self.available_modes:
-            raise ValueError(
-                f"{mode} is not one of the valid available modes: {self.available_modes}"
-            )
-        if self.smarthumidifier.set_humidity_mode(_get_vs_mode(mode)):
-            self.schedule_update_ha_state()
-        else:
-            raise ValueError("An error occurred while setting mode.")
+   async def async_turn_off(self, **kwargs: Any) -> None:
+       """Turn the humidifier off."""
+       result = await self.hass.async_add_executor_job(
+           self.smarthumidifier.turn_off
+       )
+       if result:
+           self.async_write_ha_state()
 
-    def turn_on(self, **kwargs) -> None:
-        """Turn the device on."""
-        success = self.smarthumidifier.turn_on()
-        if not success:
-            raise ValueError("An error occurred while turning on.")
+   async def async_set_mist_level(self, level: int) -> None:
+       """Set the mist level (1-9)."""
+       if 1 <= level <= 9:
+           result = await self.hass.async_add_executor_job(
+               self.smarthumidifier.set_virtual_level, level
+           )
+           if result:
+               self.async_write_ha_state()
 
-    def turn_off(self, **kwargs) -> None:
-        """Turn the device off."""
-        success = self.smarthumidifier.turn_off()
-        if not success:
-            raise ValueError("An error occurred while turning off.")
+   async def async_set_display(self, display: bool) -> None:
+       """Turn the display on or off."""
+       result = await self.hass.async_add_executor_job(
+           self.smarthumidifier.set_display, display
+       )
+       if result:
+           self.async_write_ha_state()
 
-class VeSyncHumidifier600SHA(VeSyncHumidifierHA):
-    """Representation of a VeSync 600S humidifier."""
-
-    def __init__(self, humidifier: VeSyncHumid, coordinator) -> None:
-        """Initialize the VeSync 600S humidifier device."""
-        super().__init__(humidifier, coordinator)
-        self.smarthumidifier = humidifier
-
-    @property
-    def available_modes(self) -> list[str]:
-        """Return the available modes."""
-        return [MODE_AUTO, MODE_NORMAL]
-
-    @property
-    def target_humidity(self) -> int:
-        """Return the humidity we try to reach."""
-        return self.smarthumidifier.config.get("target_humidity", 45)
-
-    @property
-    def mode(self) -> str | None:
-        """Get the current preset mode."""
-        current_mode = self.smarthumidifier.details.get("mode", "manual")
-        return MODE_AUTO if current_mode == "auto" else MODE_NORMAL
-
-    @property
-    def extra_state_attributes(self) -> Mapping[str, Any]:
-        """Return the state attributes of the humidifier."""
-        attr = super().extra_state_attributes
-        attr.update({
-            "mist_level": self.smarthumidifier.details.get("mist_level", 1),
-            "water_lacks": self.smarthumidifier.details.get("water_lacks", False),
-            "humidity_high": self.smarthumidifier.details.get("humidity_high", False),
-            "night_light": self.smarthumidifier.details.get("night_light", False),
-            "display": self.smarthumidifier.details.get("display", True),
-        })
-        return attr
+   async def async_set_drying_mode(self, enabled: bool, level: int = 1) -> None:
+       """Set the drying mode."""
+       result = await self.hass.async_add_executor_job(
+           self.smarthumidifier.set_drying_mode,
+           {
+               "autoDryingSwitch": 1 if enabled else 0,
+               "dryingLevel": level
+           }
+       )
+       if result:
+           self.async_write_ha_state()
