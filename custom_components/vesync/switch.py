@@ -10,6 +10,10 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .common import VeSyncBaseEntity, VeSyncDevice
 from .const import DEV_TYPE_TO_HA, DOMAIN, VS_DISCOVERY, VS_SWITCHES
+from .const import (
+    DOMAIN, VS_DISCOVERY, VS_SWITCHES, VS_HUMIDIFIERS_TYPES,
+    DEV_TYPE_TO_HA
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -48,14 +52,24 @@ def _setup_entities(devices, async_add_entities, coordinator):
             entities.append(VeSyncSwitchHA(dev, coordinator))
         if DEV_TYPE_TO_HA.get(dev.device_type) == "switch":
             entities.append(VeSyncLightSwitch(dev, coordinator))
-        if getattr(dev, "set_auto_mode", None):
-            entities.append(VeSyncHumidifierAutoOnHA(dev, coordinator))
-        if getattr(dev, "automatic_stop_on", None):
-            entities.append(VeSyncHumidifierAutomaticStopHA(dev, coordinator))
-        if getattr(dev, "turn_on_display", None):
-            entities.append(VeSyncHumidifierDisplayHA(dev, coordinator))
-        if getattr(dev, "child_lock_on", None):
-            entities.append(VeSyncFanChildLockHA(dev, coordinator))
+        
+        # For humidifiers and fans
+        if dev.device_type in VS_HUMIDIFIERS_TYPES:
+            # Check available features in device details
+            details = getattr(dev, "details", {})
+            config = getattr(dev, "config", {})
+            
+            if details.get("mode") is not None:
+                entities.append(VeSyncHumidifierAutoOnHA(dev, coordinator))
+            
+            if "automatic_stop" in details or "automatic_stop" in config:
+                entities.append(VeSyncHumidifierAutomaticStopHA(dev, coordinator))
+            
+            if details.get("display") is not None:
+                entities.append(VeSyncHumidifierDisplayHA(dev, coordinator))
+            
+            if details.get("child_lock") is not None:
+                entities.append(VeSyncFanChildLockHA(dev, coordinator))
 
     async_add_entities(entities, update_before_add=True)
 
@@ -205,16 +219,30 @@ class VeSyncHumidifierAutomaticStopHA(VeSyncSwitchEntity):
     @property
     def is_on(self):
         """Return True if automatic stop is on."""
-        return self.device.config["automatic_stop"]
+        # Changed from config to details to match where the data actually is
+        return self.device.details.get("automatic_stop", False)
 
     def turn_on(self, **kwargs):
         """Turn the automatic stop on."""
-        self.device.automatic_stop_on()
+        try:
+            if hasattr(self.device, "automatic_stop_on"):
+                self.device.automatic_stop_on()
+            elif hasattr(self.device, "set_automatic_stop"):
+                self.device.set_automatic_stop(True)
+            self.async_write_ha_state()
+        except Exception as ex:
+            _LOGGER.error(f"Failed to turn on automatic stop: {ex}")
 
     def turn_off(self, **kwargs):
         """Turn the automatic stop off."""
-        self.device.automatic_stop_off()
-
+        try:
+            if hasattr(self.device, "automatic_stop_off"):
+                self.device.automatic_stop_off()
+            elif hasattr(self.device, "set_automatic_stop"):
+                self.device.set_automatic_stop(False)
+            self.async_write_ha_state()
+        except Exception as ex:
+            _LOGGER.error(f"Failed to turn off automatic stop: {ex}")
 
 class VeSyncHumidifierAutoOnHA(VeSyncSwitchEntity):
     """Provide switch to turn off auto mode and set manual mist level 1 on a VeSync humidifier."""
